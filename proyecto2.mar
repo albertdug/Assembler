@@ -1,0 +1,239 @@
+.PSECT DATOS,NOEXE,WRT,LONG
+        temp: .BLKL 20
+        longTemp: .LONG 0
+        descTemp: .LONG 20
+                .LONG temp
+        temp2: .BLKB 20
+        longTemp2: .LONG 0
+        descTemp2: .LONG 20
+                   .LONG temp2
+        contOp: .LONG 0
+        arrOp: .BLKL 28
+        longArrOp: .LONG 0
+        descArrOp: .LONG 28
+                .LONG arrOp
+        arrVar: .BLKL 8
+        longArrVar: .LONG 0
+        descArrVar: .LONG 8
+                .LONG arrVar
+                arrReg: .BLKL 8
+        longArrReg: .LONG 0
+        descArrReg: .LONG 8
+                arrReg: .BLKL 8
+                .LONG arrReg
+        arrInst: .BLKB 90
+        longArrInst: .LONG 0
+        descArrInst: .LONG 90
+                     .LONG arrInst
+
+        clr: .ASCID/CLR/
+        mul: .ASCID/MUL/
+        dec: .ASCID/DEC/
+        inc: .ASCID/INC/
+        add: .ASCID/ADD/
+        sub: .ASCID/SUB/
+        div: .ASCID/DIV/
+        varA: .ASCID/A/
+        varB: .ASCID/B/
+        varC: .ASCID/C/
+        varD: .ASCID/D/
+        reg0: .ASCID/R0/
+        reg1: .ASCID/R1/
+        reg2: .ASCID/R2/
+        reg3: .ASCID/R3/
+        vacio: .ASCID/./
+        titulo: .ASCID/TRADUCTOR DE INSTRUCCIONES BINARIAS/
+        barra: .ASCID/-----------------------------------/
+        leerOp: .ASCID/Introduzca los codigos para los siguientes operandos: /
+        leerVar: .ASCID/Introduzca los codigos para las variables: /
+        leerReg: .ASCID/Introduzca los codigos para los registros: /
+        mensajeErrorOp: .ASCID/Codigo de operacion invalido./
+        mensajeErrorVar: .ASCID/Codigo de variable invalido./
+        mensajeErrorReg: .ASCID/Codigo de registro invalido./
+        mensajeDuplicado: .ASCID/El codigo introducido ya esta en uso. Ingrese otro codigo./
+        leerInst: .ASCID/Introduzca las instrucciones. * para finalizar: /
+        mensajeErrorInst: .ASCID/La instruccion introducida es invalida./
+        mensajeLongitudInst: .ASCID/La instruccion debe ser de 7 o 9 digitos./
+
+.MACRO VALIDARLONGITUD longitud,tamano,resultado,?No,?Fin
+        CMPL longitud, tamano
+        BNEQ No
+        MOVL #1,resultado
+        BRW Fin
+        No:
+        CLRL resultado
+        Fin:
+.END VALIDARLONGITUD
+
+.MACRO VALIDARC arreglo,longitud,resultado,?Normal,?While,?EndWhile,?Then,?Else,?EndIf
+        MOVL #1,resultado
+        MOVAL arreglo,R7
+        CLRL R8
+        While:
+                CMPL R8,longitud
+                BGEQ EndWhile
+                CMPB (R7)[R8], #^A/1/
+                BEQL Then
+                CMPB (R7)[R8], #^A/0/
+                BNEQ Else
+            Then:
+                        INCL R8
+                        BRW EndIf
+            Else:
+                        MOVL #0,resultado
+                        BRW EndWhile
+            EndIf:
+            BRW While
+        EndWhile:
+.ENDM VALIDARC
+
+.MACRO CADENAANUMERO cadena,inicio,fin,numero,?For,?If,?EndIf,?Return,?Salir
+        TSTL fin
+        BEQL Return
+        CMPL inicio,fin
+        BGTR Return
+        MOVAL cadena,R0 ; Direccionamiento de cadena
+        MOVL fin,R1 ; Indice del For (For R1:=fin down-to inicio)
+        MOVL #1,R2 ; Multiplicador (1,10,100,...)
+        CLRL R3 ; Resultado. Al final R3 se copiara a numero. Se usa R3 para mayor rapidez en las operaciones
+        For:
+                If: CMPB (R0)[R1],#^A/1/
+                BNEQ EndIf
+                        ADDL R2,R3
+                EndIf:
+                MULL #10,R2
+        ACBL inicio,#-1,R1,For
+        MOVL R3,numero
+        BRW Salir
+        Return:
+                MOVL #-1,numero
+        Salir:
+.ENDM CADENAANUMERO
+
+.MACRO TRADUCIR arreglo,longitud,valor,resultado,?While,?EndIf,?Fin1,?Fin2
+        MOVAL arreglo, R1
+        CLRL R0
+        While:
+                CMPL R0,longitud
+                BGEQ Fin1
+                CMPL valor,(R1)[R0]
+                BNEQ EndIf
+                MOVL R0,resultado
+                BRW Fin2
+                EndIf:
+                INCL R0
+                BRW While
+        Fin1:
+                MOVL #-1,resultado
+        Fin2:
+.ENDM TRADUCIR
+
+.MACRO LEERCODIGOS arreglo,longitud,temp,descTemp,longTemp,inicio,fin,mensaje,mensajeError,mensajeDuplicado,?While1,?EndWhile1,?Whi?
+    SUBL3 inicio,fin,R10
+    INCL R10
+        While1:
+                MOVL #20,descTemp
+                LEER longTemp,mensaje,descTemp
+                VALIDARC temp,longTemp,R6
+                VALIDARLONGITUD longTemp,R10,R6
+                While2:
+                    TSTL R6
+                    BNEQ EndWhile2
+                    IMPRIMIR mensajeError
+                    MOVL #20,descTemp
+                    LEER longTemp,mensaje,descTemp
+                    VALIDARC temp,longTemp,R6
+                    VALIDARLONGITUD longTemp,R10,R6
+                    BRW While2
+            EndWhile2:
+                CADENAANUMERO temp,#0,longTemp,R6
+                TRADUCIR arreglo,longitud,R6,R7
+                CMPL R7,#-1
+                BEQL EndWhile1
+                IMPRIMIR mensajeDuplicado
+                BRW While1
+        EndWhile1:
+        MOVAL arreglo,R7
+        MOVL longitud,R8
+        MOVL R6,(R7)[R8]
+        INCL longitud
+.ENDM LEERCODIGOS
+
+.MACRO LEERINST arreglo,longitud,temp,longTemp,descTemp,mensajeError,mensajeLongitud,?Then,?Else,?EndIf,?While,?EndWhile
+        MOVAL temp,R5
+        While:
+                MOVL #20,descTemp
+                LEER longTemp,vacio,descTemp
+                IMPRIMIR titulo
+                CLRL R0
+                CMPB (R5)[R0],#^A/*/
+                BEQL EndWhile
+                VALIDARLONGITUD longTemp,#7,R6
+                TSTL R6
+                BEQL Then
+                VALIDARLONGITUD longTemp,#7,R6
+                TSTL R6
+                BNEQ Else
+                Then:
+                        VALIDARC temp,longTemp,R6
+                        TSTL R6
+                        BNEQ EndWhile
+                        IMPRIMIR mensajeError
+                        BRW EndIf
+                Else:
+                        IMPRIMIR mensajeLongitud
+                EndIf:
+                        BRW While
+        EndWhile:
+.ENDM LEERINST
+
+.MACRO CARGARCODIGOSOP
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#0,#3,clr,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#4,#7,mul,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#8,#11,dec,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#12,#15,inc,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#16,#19,add,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#20,#23,sub,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#24,#27,div,mensajeErrorOp,mensajeDuplicado
+.ENDM CARGARCODIGOSOP
+
+.MACRO CARGARCODIGOSVAR
+        LEERCODIGOS arrVar,longArrVar,temp,descTemp,longTemp,#0,#1,varA,mensajeErrorVar,mensajeDuplicado
+        LEERCODIGOS arrVar,longArrVar,temp,descTemp,longTemp,#2,#3,varB,mensajeErrorVar,mensajeDuplicado
+        LEERCODIGOS arrVar,longArrVar,temp,descTemp,longTemp,#4,#5,varC,mensajeErrorVar,mensajeDuplicado
+        LEERCODIGOS arrVar,longArrVar,temp,descTemp,longTemp,#6,#7,varD,mensajeErrorVar,mensajeDuplicado
+.ENDM CARGARCODIGOSVAR
+
+.MACRO CARGARCODIGOSREG
+        LEERCODIGOS arrReg,longArrReg,temp,descTemp,longTemp,#0,#1,reg0,mensajeErrorReg,mensajeDuplicado
+        LEERCODIGOS arrReg,longArrReg,temp,descTemp,longTemp,#2,#3,reg1,mensajeErrorReg,mensajeDuplicado
+        LEERCODIGOS arrReg,longArrReg,temp,descTemp,longTemp,#4,#5,reg2,mensajeErrorReg,mensajeDuplicado
+        LEERCODIGOS arrReg,longArrReg,temp,descTemp,longTemp,#6,#7,reg3,mensajeErrorReg,mensajeDuplicado
+.ENDM CARGARCODIGOSREG
+
+.MACRO LEER num, men, desc
+        PUSHAL num
+        PUSHAL men
+        PUSHAL desc
+        CALLS #3,g^lib$get_input
+        MOVL num,desc
+.ENDM LEER
+
+.MACRO IMPRIMIR mensaje
+        PUSHAL mensaje
+        CALLS #1,g^lib$put_output
+.ENDM IMPRIMIR
+
+.PSECT CODIGO,EXE,NOWRT,LONG
+.ENTRY programa,0
+        ;IMPRIMIR leerOp
+        ;CARGARCODIGOSOP
+        ;IMPRIMIR leerVar
+        ;CARGARCODIGOSVAR
+        ;IMPRIMIR leerReg
+        ;CARGARCODIGOSREG
+        IMPRIMIR leerInst
+        LEERINST arrInst,longInst,temp2,longTemp2,descTemp2,mensajeErrorInst,mensajeLongitudInst
+        RET
+.END programa
+

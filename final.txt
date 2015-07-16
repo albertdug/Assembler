@@ -1,0 +1,530 @@
+.PSECT DATOS,NOEXE,WRT,LONG
+        temp: .BLKL 20
+        longTemp: .LONG 0
+        descTemp: .LONG 20
+                .LONG temp
+        temp2: .BLKB 40
+        longTemp2: .LONG 0
+        descTemp2: .LONG 40
+                   .LONG temp2
+        arrOp: .BLKL 28
+        longArrOp: .LONG 0
+        descArrOp: .LONG 28
+                .LONG arrOp
+        arrVar: .BLKL 8
+        longArrVar: .LONG 0
+        descArrVar: .LONG 8
+                .LONG arrVar
+        arrReg: .BLKL 8
+        longArrReg: .LONG 0
+        descArrReg: .LONG 8
+                .LONG arrReg
+        arrInst: .BLKB 90
+        longArrInst: .LONG 0
+        descArrInst: .LONG 90
+                     .LONG arrInst
+
+        codOp: .LONG 0
+        tipoOp: .LONG 0
+        op1: .LONG 0
+        op2: .LONG 0
+
+        inst0: .ASCID/CLR: /
+        inst1: .ASCID/INC: /
+        inst2: .ASCID/DEC: /
+        inst3: .ASCID/ADD: /
+        inst4: .ASCID/MUL: /
+        inst5: .ASCID/SUB: /
+        inst6: .ASCID/DIV: /
+        varA: .ASCID/A: /
+        varB: .ASCID/B: /
+        varC: .ASCID/C: /
+        varD: .ASCID/D: /
+        reg0: .ASCID/R0: /
+        reg1: .ASCID/R1: /
+        reg2: .ASCID/R2: /
+        reg3: .ASCID/R3: /
+        vacio: .ASCID//
+        titulo: .ASCID/TRADUCTOR DE INSTRUCCIONES BINARIAS/
+        barra: .ASCID/-----------------------------------/
+        leerOp: .ASCID/Introduzca los codigos para los siguientes operandos: /
+        leerVar: .ASCID/Introduzca los codigos para las variables: /
+        leerReg: .ASCID/Introduzca los codigos para los registros: /
+        mensajeErrorOp: .ASCID/Codigo de operacion invalido./
+        mensajeErrorVar: .ASCID/Codigo de variable invalido./
+        mensajeErrorReg: .ASCID/Codigo de registro invalido./
+        mensajeErrorInst2: .ASCII/Instruccion invalida./
+        mensajeDuplicado: .ASCID/El codigo introducido ya esta en uso. Ingrese otro codigo./
+        leerInst: .ASCID/Introduzca las instrucciones. * para finalizar: /
+        mensajeErrorInst: .ASCID/La instruccion introducida es invalida./
+        mensajeLongitudInst: .ASCID/La instruccion debe ser de 7 o 9 digitos./
+		
+.MACRO SALTAR cond,etiqueta,?Opc1,?Opc2
+        B'cond Opc1
+        BRW Opc2
+        Opc1:
+                JMP etiqueta
+        Opc2:
+                NOP
+.ENDM SALTAR
+
+.MACRO VALIDARLONGITUD longitud,tamano,resultado,?No,?Fin
+        CMPL longitud, tamano
+        BNEQ No
+        MOVL #1,resultado
+        BRW Fin
+        No:
+        CLRL resultado
+        Fin:
+.END VALIDARLONGITUD
+
+.MACRO VALIDARC arreglo,longitud,resultado,?While,?EndWhile,?Then,?Else,?EndIf
+        MOVL #1,resultado
+        MOVAL arreglo,R7
+        CLRL R8
+        While:
+                CMPL R8,longitud
+                BGEQ EndWhile
+                CMPB (R7)[R8], #^A/1/
+                BEQL Then
+                CMPB (R7)[R8], #^A/0/
+                BNEQ Else
+            Then:
+                        INCL R8
+                        BRW EndIf
+            Else:
+                        MOVL #0,resultado
+                        BRW EndWhile
+            EndIf:
+            BRW While
+        EndWhile:
+.ENDM VALIDARC
+
+.MACRO DIVIDIRCADENA cadena,longitud,codOp,tipoOp,op1,op2,?SinOp2,?Return,?Fin,?Normal
+        MOVL #-1,op2
+        CMPL longitud,#9
+        SALTAR NEQ,SinOp2
+        CADENAANUMERO cadena,#7,#9,op2
+        BRW Normal
+        SinOp2:
+        CMPL longitud,#7
+        SALTAR NEQ,Return
+        Normal:
+        CADENAANUMERO cadena,#0,#4,codOp
+        CADENAANUMERO cadena,#4,#5,tipoOp
+        CADENAANUMERO cadena,#5,#7,op1
+        BRW Fin
+        Return:
+                MOVL #-1,codOp
+        Fin:
+.ENDM DIVIDIRCADENA
+
+.MACRO CADENAANUMERO cadena,inicio,fin,numero,?For,?If,?EndIf,?Return,?Salir
+        TSTL fin
+        BEQL Return
+        CMPL inicio,fin
+        BGTR Return
+        MOVAL cadena,R0 ; Direccionamiento de cadena
+        SUBL3 #1,fin,R1 ; Indice del For (For R1:=fin down-to inicio)
+        MOVL #1,R2 ; Multiplicador (1,10,100,...)
+        CLRL R3 ; Resultado. Al final R3 se copiara a numero. Se usa R3 para mayor rapidez en las operaciones
+        For:
+                If: CMPB (R0)[R1],#^A/1/
+                BNEQ EndIf
+                        ADDL R2,R3
+                EndIf:
+                MULL #10,R2
+        ACBL inicio,#-1,R1,For
+        MOVL R3,numero
+        BRW Salir
+        Return:
+                MOVL #-1,numero
+        Salir:
+.ENDM CADENAANUMERO
+
+.MACRO TRADUCIR arreglo,longitud,valor,resultado,?While,?EndIf,?Fin1,?Fin2
+        CMPL valor,#-1
+                BEQL Fin1
+                MOVAL arreglo, R1
+        CLRL R0
+        While:
+                CMPL R0,longitud
+                BGEQ Fin1
+                CMPL valor,(R1)[R0]
+                BNEQ EndIf
+                MOVL R0,resultado
+                BRW Fin2
+                EndIf:
+                INCL R0
+                BRW While
+        Fin1:
+                MOVL #-1,resultado
+        Fin2:
+.ENDM TRADUCIR
+
+.MACRO LEERCODIGOS arreglo,longitud,temp,descTemp,longTemp,inicio,fin,mensaje,mensajeError,mensajeDuplicado,-
+?While1,?EndWhile1,?While2,?EndWhile2
+    SUBL3 inicio,fin,R10
+    INCL R10
+        While1:
+                MOVL #20,descTemp
+                LEER longTemp,mensaje,descTemp
+                VALIDARC temp,longTemp,R11
+                TSTL R11
+                BEQL While2
+                VALIDARLONGITUD longTemp,R10,R11
+                While2:
+                    TSTL R11
+                    BNEQ EndWhile2
+                    IMPRIMIR mensajeError
+                    MOVL #20,descTemp
+                    LEER longTemp,mensaje,descTemp
+                    VALIDARC temp,longTemp,R11
+                    TSTL R11
+                    BEQL While2
+                    VALIDARLONGITUD longTemp,R10,R11
+                    BRW While2
+                EndWhile2:
+                CADENAANUMERO temp,#0,longTemp,R6
+                TRADUCIR arreglo,longitud,R6,R7
+                CMPL R7,#-1
+                BEQL EndWhile1
+                IMPRIMIR mensajeDuplicado
+                BRW While1
+        EndWhile1:
+        MOVAL arreglo,R7
+        MOVL longitud,R8
+        MOVL R6,(R7)[R8]
+        INCL longitud
+.ENDM LEERCODIGOS
+
+.MACRO LEERINST arreglo,longitud,temp,longTemp,descTemp,mensajeError,mensajeLongitud,-
+?For,?Guardar,?Then,?Else,?EndIf,?While,?EndWhile
+        CLRL longitud
+        While:
+                MOVL #40,descTemp
+                LEER longTemp,vacio,descTemp
+                MOVAB temp,R5
+                CLRL R9
+                CMPB (R5)[R9],#^A/*/
+                SALTAR EQL,EndWhile
+                VALIDARLONGITUD longTemp,#7,R6
+                TSTL R6
+                SALTAR NEQ,Then
+                VALIDARLONGITUD longTemp,#9,R6
+                TSTL R6
+                SALTAR EQL,Else
+                Then:
+                        VALIDARC temp,longTemp,R6
+                        TSTL R6
+                        SALTAR NEQ,Guardar
+                        IMPRIMIR mensajeError
+                        SALTAR RW,EndIf
+                Else:
+                        IMPRIMIR mensajeLongitud
+                        SALTAR RW,EndIf
+                Guardar:
+                        CLRL R6
+                        MOVAB temp,R7
+                        MOVAB arreglo,R8
+                        MOVL longitud,R9
+                        For:
+                                MOVB (R7)[R6],(R8)[R9]
+                                INCL R9
+                        ACBL longTemp,#1,R6,For
+                        INCL R9
+                        MOVL R9,longitud
+                EndIf:
+                        SALTAR RW,While
+        EndWhile:
+.ENDM LEERINST
+
+.MACRO PROCESARINSTRUCCIONES arreglo,longitud,temp,longTemp,descTemp,codOp,tipoOp,op1,op2,-
+arrOp,longOp,arrVar,longVar,arrReg,longReg,?While1,?EndWhile1,?While2,?EndWhile2,?Registros,?EndIf,-
+?For,?Normal
+        CLRL R6
+        MOVAB arreglo,R7
+        MOVAB temp,R8
+        While1:
+                CMPL R6,longitud
+                SALTAR GEQ,EndWhile1
+                CLRL R9
+                MOVL #40,descTemp
+                While2:
+                        CMPB #^A/ /,(R7)[R6]
+                        SALTAR EQL,EndWhile2
+                        MOVB (R7)[R6],(R8)[R9]
+                        INCL R9
+                        INCL R6
+                        BRW While2
+                EndWhile2:
+                ADDL #2,R6
+                MOVL R9,longTemp
+                DIVIDIRCADENA temp,longTemp,R10,tipoOp,R3,R4
+                TRADUCIR arrOp,longOp,R10,codOp
+                TSTL tipoOp
+                SALTAR NEQ,Registros
+                TRADUCIR arrVar,longVar,R3,op1
+                TRADUCIR arrVar,longVar,R4,op2
+                BRW EndIf
+                Registros:
+                TRADUCIR arrReg,longReg,R3,op1
+                TRADUCIR arrReg,longReg,R4,op2
+                EndIf:
+                CMPL op2,#-1
+                BNEQ Normal
+                MOVL #7,R11
+                MOVB #^A/ /,(R8)[R11]
+                Normal:
+                IMPRIMIRINST temp,longTemp,descTemp,codOp,tipoOp,op1,op2
+                MOVL longTemp,R9
+                CMPL op2,#-1
+                BEQL For
+                INCL R9
+                For:
+                        MOVB #^A/ /,(R8)[R9]
+                ACBL #40,#1,R9,For
+                IMPRIMIR descTemp
+                BRW While1
+        EndWhile1:
+.ENDM PROCESARINSTRUCCIONES
+
+.MACRO IMPRIMIRINST temp,longTemp,descTemp,codOp,tipoOp,op1,op2,-
+?Cero,?Uno,?Dos,?Tres,?Cuatro,?Cinco,?Break,?Registros,?EndIf,?A1,?B1,?C1,?A2,?B2,?C2,?D2,?A3,?B3,?C3,?A4,?B4,?C4,?Salir1,?Salir2,-
+?Invalido
+        MOVAB temp,R10
+        MOVL longTemp,R11
+        INCL R11
+        MOVB #^A/ /,(R10)[R11]
+        INCL R11
+        MOVB #^A/ /,(R10)[R11]
+        INCL R11
+        MOVB #^A/|/,(R10)[R11]
+        INCL R11
+        MOVB #^A/ /,(R10)[R11]
+        INCL R11
+        MOVB #^A/ /,(R10)[R11]
+        INCL R11
+        CMPL codOp,#-1
+        SALTAR EQL,Invalido
+        TSTL codOp
+        SALTAR EQL,Cero
+        CMPL codOp,#1
+        SALTAR EQL,Uno
+        CMPL codOp,#2
+        SALTAR EQL,Dos
+        CMPL codOp,#3
+        SALTAR EQL,Tres
+        CMPL codOp,#4
+        SALTAR EQL,Cuatro
+        CMPL codOp,#5
+        SALTAR EQL,Cinco
+                MOVB #^A/D/,(R10)[R11]
+                INCL R11
+                MOVB #^A/I/,(R10)[R11]
+                INCL R11
+                MOVB #^A/V/,(R10)[R11]
+                INCL R11
+                BRW Break
+        Cero:
+                CMPL op2,#-1
+                SALTAR NEQ,Invalido
+                MOVB #^A/C/,(R10)[R11]
+                INCL R11
+                MOVB #^A/L/,(R10)[R11]
+                INCL R11
+                MOVB #^A/R/,(R10)[R11]
+                INCL R11
+                BRW Break
+        Uno:
+                CMPL op2,#-1
+                SALTAR NEQ,Invalido
+                MOVB #^A/I/,(R10)[R11]
+                INCL R11
+                MOVB #^A/N/,(R10)[R11]
+                INCL R11
+                MOVB #^A/C/,(R10)[R11]
+                INCL R11
+                BRW Break
+        Dos:
+                CMPL op2,#-1
+                SALTAR NEQ,Invalido
+                MOVB #^A/D/,(R10)[R11]
+                INCL R11
+                MOVB #^A/E/,(R10)[R11]
+                INCL R11
+                MOVB #^A/C/,(R10)[R11]
+                INCL R11
+                BRW Break
+        Tres:
+                MOVB #^A/A/,(R10)[R11]
+                INCL R11
+                MOVB #^A/D/,(R10)[R11]
+                INCL R11
+                MOVB #^A/D/,(R10)[R11]
+                INCL R11
+                BRW Break
+        Cuatro:
+                MOVB #^A/M/,(R10)[R11]
+                INCL R11
+                MOVB #^A/U/,(R10)[R11]
+                INCL R11
+                MOVB #^A/L/,(R10)[R11]
+                INCL R11
+                BRW Break
+        Cinco:
+                MOVB #^A/S/,(R10)[R11]
+                INCL R11
+                MOVB #^A/U/,(R10)[R11]
+                INCL R11
+                MOVB #^A/B/,(R10)[R11]
+                INCL R11
+                BRW Break
+        Break:
+        MOVB #^A/ /,(R10)[R11]
+        INCL R11
+        TSTL tipoOp
+        SALTAR NEQ,Registros
+                TSTL op1
+                SALTAR EQL,A1
+                CMPL op1,#1
+                SALTAR EQL,B1
+                CMPL op1,#2
+                SALTAR EQL,C1
+                        MOVB #^A/D/,(R10)[R11]
+                        BRW Salir1
+                A1:
+                        MOVB #^A/A/,(R10)[R11]
+                        BRW Salir1
+                B1:
+                        MOVB #^A/B/,(R10)[R11]
+                        BRW Salir1
+                C1:
+                        MOVB #^A/C/,(R10)[R11]
+                        BRW Salir1
+                Salir1:
+                INCL R11
+                CMPL op2,#-1
+                SALTAR EQL,EndIf
+                MOVB #^A/,/,(R10)[R11]
+                INCL R11
+                TSTL op2
+                SALTAR EQL,A2
+                CMPL op2,#1
+                SALTAR EQL,B2
+                CMPL op2,#2
+                SALTAR EQL,C2
+                        MOVB #^A/D/,(R10)[R11]
+                        BRW EndIf
+                A2:
+                        MOVB #^A/A/,(R10)[R11]
+                        BRW EndIf
+                B2:
+                        MOVB #^A/B/,(R10)[R11]
+                        BRW EndIf
+                C2:
+                        MOVB #^A/C/,(R10)[R11]
+                        BRW EndIf
+        Registros:
+                MOVB #^A/R/,(R10)[R11]
+                INCL R11
+                TSTL op1
+                SALTAR EQL,A3
+                CMPL op1,#1
+                SALTAR EQL,B3
+                CMPL op1,#2
+                SALTAR EQL,C3
+                        MOVB #^A/3/,(R10)[R11]
+                        BRW Salir2
+                A3:
+                        MOVB #^A/0/,(R10)[R11]
+                        BRW Salir2
+                B3:
+                        MOVB #^A/1/,(R10)[R11]
+                        BRW Salir2
+                C3:
+                        MOVB #^A/2/,(R10)[R11]
+                        BRW Salir2
+                Salir2:
+                INCL R11
+                CMPL op2,#-1
+                SALTAR EQL,EndIf
+                MOVB #^A/,/,(R10)[R11]
+                INCL R11
+                MOVB #^A/R/,(R10)[R11]
+                INCL R11
+                TSTL op2
+                SALTAR EQL,A4
+                CMPL op2,#1
+                SALTAR EQL,B4
+                CMPL op2,#2
+                SALTAR EQL,C4
+                        MOVB #^A/3/,(R10)[R11]
+                        BRW EndIf
+                A4:
+                        MOVB #^A/0/,(R10)[R11]
+                        BRW EndIf
+                B4:
+                        MOVB #^A/1/,(R10)[R11]
+                        BRW EndIf
+                C4:
+                        MOVB #^A/2/,(R10)[R11]
+                        BRW EndIf
+        Invalido:
+                MOVC3 #21,mensajeErrorInst2,(R10)[R11]
+                ADDL #21,R11
+        EndIf:
+        MOVL R11,longTemp
+.END IMPRIMIRINST
+
+.MACRO CARGARCODIGOSOP
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#0,#3,inst0,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#4,#7,inst1,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#8,#11,inst2,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#12,#15,inst3,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#16,#19,inst4,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#20,#23,inst5,mensajeErrorOp,mensajeDuplicado
+        LEERCODIGOS arrOp,longArrOp,temp,descTemp,longTemp,#24,#27,inst6,mensajeErrorOp,mensajeDuplicado
+.ENDM CARGARCODIGOSOP
+
+.MACRO CARGARCODIGOSVAR
+        LEERCODIGOS arrVar,longArrVar,temp,descTemp,longTemp,#0,#1,varA,mensajeErrorVar,mensajeDuplicado
+        LEERCODIGOS arrVar,longArrVar,temp,descTemp,longTemp,#2,#3,varB,mensajeErrorVar,mensajeDuplicado
+        LEERCODIGOS arrVar,longArrVar,temp,descTemp,longTemp,#4,#5,varC,mensajeErrorVar,mensajeDuplicado
+        LEERCODIGOS arrVar,longArrVar,temp,descTemp,longTemp,#6,#7,varD,mensajeErrorVar,mensajeDuplicado
+.ENDM CARGARCODIGOSVAR
+
+.MACRO CARGARCODIGOSREG
+        LEERCODIGOS arrReg,longArrReg,temp,descTemp,longTemp,#0,#1,reg0,mensajeErrorReg,mensajeDuplicado
+        LEERCODIGOS arrReg,longArrReg,temp,descTemp,longTemp,#2,#3,reg1,mensajeErrorReg,mensajeDuplicado
+        LEERCODIGOS arrReg,longArrReg,temp,descTemp,longTemp,#4,#5,reg2,mensajeErrorReg,mensajeDuplicado
+        LEERCODIGOS arrReg,longArrReg,temp,descTemp,longTemp,#6,#7,reg3,mensajeErrorReg,mensajeDuplicado
+.ENDM CARGARCODIGOSREG
+
+.MACRO LEER num, men, desc
+        PUSHAL num
+        PUSHAL men
+        PUSHAL desc
+        CALLS #3,g^lib$get_input
+        MOVL num,desc
+.ENDM LEER
+
+.MACRO IMPRIMIR mensaje
+        PUSHAL mensaje
+        CALLS #1,g^lib$put_output
+.ENDM IMPRIMIR
+
+.PSECT CODIGO,EXE,NOWRT,LONG
+.ENTRY programa,0
+        IMPRIMIR leerOp
+        CARGARCODIGOSOP
+        IMPRIMIR leerVar
+        CARGARCODIGOSVAR
+        IMPRIMIR leerReg
+        CARGARCODIGOSREG
+        IMPRIMIR leerInst
+        LEERINST arrInst,longArrInst,temp2,longTemp2,descTemp2,mensajeErrorInst,mensajeLongitudInst
+        PROCESARINSTRUCCIONES arrInst,longArrInst,temp2,longTemp2,descTemp2,codOp,tipoOp,op1,op2,-
+        arrOp,longArrOp,arrVar,longArrVar,arrReg,longArrReg
+        RET
+.END programa
